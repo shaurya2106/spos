@@ -1,0 +1,196 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cstdlib>   // atoi
+#include <iomanip>
+
+using namespace std;
+
+struct Symbol { string name; int addr; };
+struct Literal { string lit; int addr; };
+
+int findSymbol(const vector<Symbol>& symtab, const string& name) {
+    for (size_t i = 0; i < symtab.size(); ++i)
+        if (symtab[i].name == name) return (int)i;
+    return -1;
+}
+int findLiteral(const vector<Literal>& littab, const string& lit) {
+    for (size_t i = 0; i < littab.size(); ++i)
+        if (littab[i].lit == lit) return (int)i;
+    return -1;
+}
+int getSymbolAddr(const vector<Symbol>& symtab, const string& name) {
+    int pos = findSymbol(symtab, name); return pos == -1 ? -1 : symtab[pos].addr;
+}
+int getLiteralAddr(const vector<Literal>& littab, const string& lit) {
+    int pos = findLiteral(littab, lit); return pos == -1 ? -1 : littab[pos].addr;
+}
+
+int main() {
+    vector<Symbol> symtab;
+    vector<Literal> littab;
+    vector<int> pooltab;
+    vector<string> icType;    // e.g. "IS,04"
+    vector<string> icOperand; // e.g. "A" or "=5" or "C,100" or "-"
+    int LC = 0;
+    pooltab.push_back(0); // first pool start = 0
+
+    int n;
+    cout << "Enter number of instructions: ";
+    if (!(cin >> n)) { cerr << "Invalid number\n"; return 1; }
+
+    cout << "\nEnter Instructions (format: LABEL OPCODE OPERAND)\n";
+    for (int i = 0; i < n; ++i) {
+        string label, opcode, operand;
+        cin >> label >> opcode >> operand;
+
+        // --- record literal if operand is a literal (happens for MOVER, etc.) ---
+        if (!operand.empty() && operand[0] == '=') {
+            if (findLiteral(littab, operand) == -1) {
+                littab.push_back({operand, -1});
+            }
+        }
+
+        // PASS I
+        if (opcode == "START") {
+            LC = atoi(operand.c_str());
+            icType.push_back("AD,01");
+            icOperand.push_back("C," + to_string(LC));
+            continue;
+        }
+
+        if (label != "**") {
+            int p = findSymbol(symtab, label);
+            if (p == -1) symtab.push_back({label, LC});
+            else symtab[p].addr = LC; // update if placeholder
+        }
+
+        if (opcode == "MOVER") {
+            icType.push_back("IS,04");
+            icOperand.push_back(operand);
+        } else if (opcode == "MOVEM") {
+            icType.push_back("IS,05");
+            icOperand.push_back(operand);
+        } else if (opcode == "ADD") {
+            icType.push_back("IS,01");
+            icOperand.push_back(operand);
+        } else if (opcode == "SUB") {
+            icType.push_back("IS,02");
+            icOperand.push_back(operand);
+        } else if (opcode == "MULT") {
+            icType.push_back("IS,03");
+            icOperand.push_back(operand);
+        } else if (opcode == "BC") {
+            icType.push_back("IS,07");
+            icOperand.push_back(operand);
+        } else if (opcode == "READ") {
+            icType.push_back("IS,09");
+            icOperand.push_back(operand);
+        } else if (opcode == "PRINT") {
+            icType.push_back("IS,10");
+            icOperand.push_back(operand);
+        } else if (opcode == "DC") {
+            if (findSymbol(symtab, label) == -1) symtab.push_back({label, LC});
+            else symtab[findSymbol(symtab, label)].addr = LC;
+            icType.push_back("DL,01");
+            icOperand.push_back("C," + operand);
+            ++LC;
+            continue;
+        } else if (opcode == "DS") {
+            if (findSymbol(symtab, label) == -1) symtab.push_back({label, LC});
+            else symtab[findSymbol(symtab, label)].addr = LC;
+            icType.push_back("DL,02");
+            icOperand.push_back("C," + operand);
+            LC += atoi(operand.c_str());
+            continue;
+        } else if (opcode == "LTORG" || opcode == "END") {
+            icType.push_back("AD,02");
+            icOperand.push_back("-");
+            // assign addresses to literals in current pool
+            int start = pooltab.back();
+            for (int j = start; j < (int)littab.size(); ++j) {
+                littab[j].addr = LC++;
+            }
+            pooltab.push_back((int)littab.size());
+        } else {
+            // Unknown opcode -- store as unknown IS with operand
+            icType.push_back("IS,??");
+            icOperand.push_back(operand);
+            ++LC;
+        }
+
+        // increment LC for handled IS instructions (we incremented already for DC/DS and unknown)
+        if (!(opcode == "DC" || opcode == "DS" || opcode == "LTORG" || opcode == "END"))
+            ++LC;
+    }
+
+    // PASS-I OUTPUT
+    cout << "\n=========== PASS I OUTPUT ===========\n\n";
+    cout << "Intermediate Code:\n";
+    for (size_t i = 0; i < icType.size(); ++i) cout << icType[i] << "\t" << icOperand[i] << '\n';
+
+    cout << "\nSymbol Table:\n" << left << setw(12) << "Symbol" << "Address\n";
+    for (const auto &s : symtab) cout << left << setw(12) << s.name << s.addr << '\n';
+
+    cout << "\nLiteral Table:\n" << left << setw(12) << "Literal" << "Address\n";
+    for (const auto &L : littab) {
+        cout << left << setw(12) << L.lit;
+        if (L.addr == -1) cout << "UNASSIGNED\n"; else cout << L.addr << '\n';
+    }
+
+    cout << "\nPool Table:\n";
+    for (const auto &p : pooltab) cout << p << '\n';
+
+    // PASS II - Generate Machine Code
+    cout << "\n=========== PASS II OUTPUT ===========\n";
+    cout << "Machine Code:\n";
+    for (size_t i = 0; i < icType.size(); ++i) {
+        const string &typ = icType[i];
+        const string &opd = icOperand[i];
+
+        if (typ.rfind("IS,", 0) == 0) {
+            string opc = typ.substr(3);
+            int addr = -1;
+            if (!opd.empty() && opd[0] == '=') addr = getLiteralAddr(littab, opd);
+            else if (!opd.empty() && opd.find("C,") == string::npos && opd != "-")
+                addr = getSymbolAddr(symtab, opd);
+            else if (!opd.empty() && opd.find("C,") == 0)
+                addr = atoi(opd.substr(2).c_str());
+
+            if (addr != -1) cout << "+ " << opc << " " << addr << '\n';
+            else cout << "+ " << opc << " 00\n";
+        } else if (typ == "DL,01") {
+            if (opd.rfind("C,", 0) == 0) cout << "- 00 " << opd.substr(2) << '\n';
+            else cout << "- 00 " << opd << '\n';
+        } else if (typ == "DL,02") {
+            cout << "- 00 00\n";
+        }
+        // AD/others produce no machine code
+    }
+
+    return 0;
+}
+
+
+/*input
+7
+** START 100
+** READ A
+** MOVER =5
+A MOVEM B
+** ADD C
+B DC 2
+** END **
+*/
+
+/*
+8
+** START 200
+** READ X
+** MOVER =10
+X ADD Y
+** SUB =20
+Y DS 2
+** PRINT X
+** END **
+*/
