@@ -1,3 +1,7 @@
+//PC And RR command:g++ file_name.cpp -o file_name -pthread
+//o/p command: ./file_name
+
+
 #include <iostream>
 #include <thread>
 #include <mutex>
