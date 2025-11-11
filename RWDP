@@ -1,0 +1,97 @@
+#include <iostream>
+#include <thread>
+#include <mutex>
+#include <shared_mutex>
+#include <condition_variable>
+#include <queue>
+#include <chrono>
+using namespace std;
+
+/*---------------------------------------------------------
+  1. READER-WRITER PROBLEM command:g++ -std=c++17 -o file_name file_name.cpp -pthread, o/p command:./file_name
+----------------------------------------------------------*/
+
+shared_mutex rw_mutex; // allows multiple readers, single writer
+int data_value = 0;
+
+void reader() {
+    for (int i = 0; i < 3; i++) {
+        shared_lock<shared_mutex> lock(rw_mutex); // shared access
+        cout << "[Reader] reads data: " << data_value << endl;
+        lock.unlock();
+        this_thread::sleep_for(chrono::milliseconds(400));
+    }
+}
+
+void writer() {
+    for (int i = 0; i < 3; i++) {
+        unique_lock<shared_mutex> lock(rw_mutex); // exclusive access
+        data_value += 10;
+        cout << "[Writer] updates data to: " << data_value << endl;
+        lock.unlock();
+        this_thread::sleep_for(chrono::milliseconds(500));
+    }
+}
+
+void readerWriterProblem() {
+    cout << "\n=== READER-WRITER PROBLEM ===\n";
+    thread read(reader);
+    thread write(writer);
+
+    read.join();
+    write.join();
+    cout << "Reader-Writer simulation complete!\n";
+}
+
+/*---------------------------------------------------------
+  3. DINING PHILOSOPHER PROBLEM
+----------------------------------------------------------*/
+const int NUM_PHILOSOPHERS = 5;
+mutex forks[NUM_PHILOSOPHERS];
+
+void philosopher(int id) {
+    int left = id;
+    int right = (id + 1) % NUM_PHILOSOPHERS;
+
+    for (int i = 0; i < 1; i++) {
+        cout << "Philosopher " << id << " is thinking\n";
+        this_thread::sleep_for(chrono::milliseconds(500));
+
+        cout << "Philosopher " << id << " is hungry\n";
+        lock(forks[left], forks[right]); // pick both forks
+
+        lock_guard<mutex> left_fork(forks[left], adopt_lock);
+        lock_guard<mutex> right_fork(forks[right], adopt_lock);
+
+        cout << "Philosopher " << id << " started eating\n";
+        this_thread::sleep_for(chrono::milliseconds(600));
+        cout << "Philosopher " << id << " finished eating\n";
+    }
+}
+
+void diningPhilosopherProblem() {
+    cout << "\n=== DINING PHILOSOPHER PROBLEM ===\n";
+    thread philosophers[NUM_PHILOSOPHERS];
+
+    for (int i = 0; i < NUM_PHILOSOPHERS; i++)
+        philosophers[i] = thread(philosopher, i);
+
+    for (int i = 0; i < NUM_PHILOSOPHERS; i++)
+        philosophers[i].join();
+
+    cout << "Dining Philosopher simulation complete!\n";
+}
+
+
+
+int main() {
+    cout << "Classical Synchronization Problems Simulation\n";
+    cout << "--------------------------------------------\n";
+
+    readerWriterProblem();
+   // producerConsumerProblem();
+    diningPhilosopherProblem();
+
+    cout << "\nAll problems simulated successfully!\n";
+    return 0;
+}
