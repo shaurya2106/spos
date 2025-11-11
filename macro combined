@@ -1,0 +1,111 @@
+#include<bits/stdc++.h>
+using namespace std;
+
+struct MNTEntry{
+    string name;
+    int mdtIndex;
+};
+
+vector<MNTEntry> MNT;
+vector<string> MDT;
+vector<string> INTERMEDIATE;
+
+void pass1(){
+    ifstream fin("input.txt");
+    ofstream mntFile("mnt.txt"), mdtFile("mdt.txt"), interFile("intermediate.txt");
+
+    if(!fin){
+        cout<< "error: cannot open file \n";
+        return;
+    }
+
+
+string line, word;
+bool inMacro = false;
+string macroName;
+int mdtPtr = 0;
+
+while(getline(fin, line)){
+    stringstream ss(line);
+    ss>>word;
+
+    if (word == "MACRO"){
+        inMacro = true;
+        continue;
+    }
+
+    if(inMacro && macroName.empty()){
+        macroName = word;
+        MNT.push_back({macroName, (int)MDT.size()});
+        continue;
+    }
+
+    if(inMacro){
+        if(word == "MEND"){
+            MDT.push_back("MEND");
+            macroName.clear();
+            inMacro = false;
+        }
+        else{
+            MDT.push_back(line);
+        }
+
+    }
+    else{
+        INTERMEDIATE.push_back(line);
+    }
+
+}
+
+mntFile << "MNT \n----------------------------\n";
+for(auto &m : MNT)
+mntFile << "Macro; "<<m.name<<"->MDT Index: "<<m.mdtIndex << "\n";
+
+mdtFile <<"MDT \n------------------------------\n";
+for(int i =0;i<(int)MDT.size();i++){
+    mdtFile << i<<": "<<MDT[i]<<"\n";
+}
+
+interFile<<"Intermediate code\n---------------------------\n";
+for(auto &line : INTERMEDIATE)
+interFile <<line<<"\n";
+cout<<"\n Pass I completed successfully!\n";
+}
+
+void pass2(){
+    ifstream interFile("intermediate.txt");
+    if(!interFile){
+        cout<< "Error opening file";
+        return;
+    }
+    cout<<"Pass II : Expanded Code \n --------------------\n";
+
+    string line,word;
+    while(getline(interFile,line)){
+        stringstream ss(line);
+        ss>>word;
+
+        bool expanded = false;
+        for(auto &m :MNT){
+            if (word == m.name){
+                expanded = true;
+                int i =m.mdtIndex;
+                while(MDT[i] != "MEND"){
+                    cout << MDT[i]<<"\n";
+                    i++;
+                }
+                break;
+            }
+        }
+        if(!expanded){
+            cout<<line<<"\n";
+        }
+    }
+}
+
+int main(){
+    cout<<"------TWO PASS MACRO PROCESSOR ------\n";
+    pass1();
+    pass2();
+    return 0;
+}
