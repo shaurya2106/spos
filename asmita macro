@@ -1,0 +1,143 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <algorithm>
+using namespace std;
+
+struct MNTEntry {
+    string name;
+    int mdt_index;
+};
+
+struct MDTEntry {
+    string line;
+};
+
+int main() {
+    vector<MNTEntry> MNT;
+    vector<MDTEntry> MDT;
+    vector<string> intermediate;
+
+    cout << "Enter program lines (type 'END' to stop):\n";
+    string line;
+    bool inMacro = false;
+    MNTEntry currentMacro;
+    int mdtIndex = 0;
+
+    // ---------------- PASS 1 ----------------
+    while (true) {
+        getline(cin, line);
+        if (line == "END") break;
+
+        if (line == "MACRO") {
+            inMacro = true;
+            continue;
+        }
+
+        if (inMacro) {
+            if (currentMacro.name.empty()) {
+                // Extract macro name only (first token)
+                stringstream ss(line);
+                ss >> currentMacro.name; 
+                currentMacro.mdt_index = mdtIndex;
+                MNT.push_back(currentMacro);
+            } else if (line == "MEND") {
+                MDT.push_back({"MEND"});
+                mdtIndex++;
+                inMacro = false;
+                currentMacro = MNTEntry(); // reset
+            } else {
+                MDT.push_back({line});
+                mdtIndex++;
+            }
+        } else {
+            intermediate.push_back(line);
+        }
+    }
+
+    // ---------------- PASS 1 OUTPUTS ----------------
+    cout << "\n========== PASS-I OUTPUT ==========\n";
+
+    cout << "\n--- MNT (Macro Name Table) ---\n";
+    cout << "Name\tMDT_Index\n";
+    for (auto &m : MNT)
+        cout << m.name << "\t" << m.mdt_index << "\n";
+
+    cout << "\n--- MDT (Macro Definition Table) ---\n";
+    for (int i = 0; i < MDT.size(); i++)
+        cout << i << "\t" << MDT[i].line << "\n";
+
+    cout << "\n--- Intermediate Code ---\n";
+    for (auto &s : intermediate)
+        cout << s << "\n";
+
+    // ---------------- PASS 2 ----------------
+    cout << "\n========== PASS-II OUTPUT ==========\n";
+    cout << "\n--- Expanded Code ---\n";
+
+    for (auto &code : intermediate) {
+        bool expanded = false;
+
+        // Tokenize the input line
+        stringstream ss(code);
+        string firstToken;
+        ss >> firstToken;
+
+        for (auto &m : MNT) {
+            if (firstToken == m.name) {
+                int index = m.mdt_index;
+
+                // Extract arguments from macro call
+                string args;
+                getline(ss, args);
+                replace(args.begin(), args.end(), ',', ' ');
+                stringstream argsStream(args);
+                string arg1, arg2;
+                argsStream >> arg1 >> arg2;
+
+                // Expand using MDT
+                while (index < MDT.size() && MDT[index].line != "MEND") {
+                    string expandedLine = MDT[index].line;
+
+                    // Replace &A and &B
+                    if (!arg1.empty()) {
+                        size_t pos = expandedLine.find("&A");
+                        if (pos != string::npos)
+                            expandedLine.replace(pos, 2, arg1);
+                    }
+                    if (!arg2.empty()) {
+                        size_t pos = expandedLine.find("&B");
+                        if (pos != string::npos)
+                            expandedLine.replace(pos, 2, arg2);
+                    }
+
+                    cout << expandedLine << "\n";
+                    index++;
+                }
+
+                expanded = true;
+                break;
+            }
+        }
+
+        if (!expanded)
+            cout << code << "\n";
+    }
+
+    cout << "\n========== END ==========\n";
+    return 0;
+}
+
+/*
+Sample Input:
+MACRO
+INCR &A,&B
+MOVER AREG,&A
+ADD AREG,&B
+MEND
+START
+INCR X,Y
+INCR M,N
+END
+*/
