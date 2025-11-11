@@ -1,3 +1,6 @@
+//PC And RR command:g++ file_name.cpp -o file_name -pthread
+//o/p command: ./file_name
+
 #include <iostream>
 #include <thread>
 #include <mutex>
@@ -8,8 +11,9 @@
 using namespace std;
 
 /*---------------------------------------------------------
-  1. READER-WRITER PROBLEM
+  1. READER-WRITER PROBLEM command:g++ -std=c++17 -o file_name file_name.cpp -pthread, o/p command:./file_name
 ----------------------------------------------------------*/
+
 shared_mutex rw_mutex; // allows multiple readers, single writer
 int data_value = 0;
 
