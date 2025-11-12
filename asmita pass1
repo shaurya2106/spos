@@ -1,0 +1,179 @@
+// SPOSpass1.cpp
+// Pass-I of a simple two-pass assembler (Intermediate code, SYMTAB, LITTAB, POOLTAB)
+// C++17, no trigraph warnings, robust duplicate handling.
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cstdlib>   // for atoi / std::stoi
+#include <iomanip>
+
+using namespace std;
+
+struct Symbol { string name; int addr; };
+struct Literal { string lit; int addr; };
+
+int findSymbol(const vector<Symbol>& symtab, const string& name) {
+    for (size_t i = 0; i < symtab.size(); ++i)
+        if (symtab[i].name == name) return (int)i;
+    return -1;
+}
+int findLiteral(const vector<Literal>& littab, const string& lit) {
+    for (size_t i = 0; i < littab.size(); ++i)
+        if (littab[i].lit == lit) return (int)i;
+    return -1;
+}
+
+int main() {
+    vector<Symbol> symtab;
+    vector<Literal> littab;
+    vector<int> pooltab;           // indices into littab where each pool starts
+    vector<string> icType;         // e.g. "IS,04", "DL,01", "AD,01"
+    vector<string> icOperand;      // e.g. "A", "=5", "C,100", "-"
+
+    int LC = 0;
+    pooltab.push_back(0);          // first pool starts at littab index 0
+
+    int n;
+    cout << "Enter number of instructions: ";
+    if (!(cin >> n)) {
+        cerr << "Invalid number\n";
+        return 1;
+    }
+
+    cout << "\nEnter Instructions (format: LABEL OPCODE OPERAND)\n";
+    cout << "Use '**' as empty label; for END use operand '**' or any placeholder.\n\n";
+
+    for (int i = 0; i < n; ++i) {
+        string label, opcode, operand;
+        cin >> label >> opcode >> operand;
+
+        // If operand is a literal (starts with '=') record it immediately (avoid duplicates)
+        if (!operand.empty() && operand[0] == '=') {
+            if (findLiteral(littab, operand) == -1) {
+                littab.push_back({operand, -1});
+            }
+        }
+
+        // Handle START directive
+        if (opcode == "START") {
+            LC = stoi(operand);
+            icType.push_back("AD,01");
+            icOperand.push_back("C," + to_string(LC));
+            continue;
+        }
+
+        // Add/update symbol (if label present)
+        if (label != "**") {
+            int sidx = findSymbol(symtab, label);
+            if (sidx == -1) symtab.push_back({label, LC});
+            else symtab[sidx].addr = LC; // update if placeholder existed
+        }
+
+        // Imperative statements and directives
+        if (opcode == "MOVER") {
+            icType.push_back("IS,04"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "MOVEM") {
+            icType.push_back("IS,05"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "ADD") {
+            icType.push_back("IS,01"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "SUB") {
+            icType.push_back("IS,02"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "MULT") {
+            icType.push_back("IS,03"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "BC") {
+            icType.push_back("IS,07"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "READ") {
+            icType.push_back("IS,09"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "PRINT") {
+            icType.push_back("IS,10"); icOperand.push_back(operand); LC++;
+        }
+        else if (opcode == "DC") {
+            // define constant at current LC
+            if (label != "**") {
+                int sidx = findSymbol(symtab, label);
+                if (sidx == -1) symtab.push_back({label, LC});
+                else symtab[sidx].addr = LC;
+            }
+            icType.push_back("DL,01");
+            icOperand.push_back("C," + operand);
+            LC++; // DC occupies one memory word
+        }
+        else if (opcode == "DS") {
+            // define storage: reserve operand words
+            if (label != "**") {
+                int sidx = findSymbol(symtab, label);
+                if (sidx == -1) symtab.push_back({label, LC});
+                else symtab[sidx].addr = LC;
+            }
+            icType.push_back("DL,02");
+            icOperand.push_back("C," + operand);
+            LC += stoi(operand);
+        }
+        else if (opcode == "LTORG" || opcode == "END") {
+            // Assembler directive: assign addresses to pending literals in current pool
+            icType.push_back("AD,02");
+            icOperand.push_back("-");
+            int start = pooltab.back();
+            for (int j = start; j < (int)littab.size(); ++j) {
+                littab[j].addr = LC++;
+            }
+            pooltab.push_back((int)littab.size()); // new pool starts after current literals
+        }
+        else {
+            // Unknown opcode: record as unknown (for debugging)
+            icType.push_back("IS,??");
+            icOperand.push_back(opcode + (operand.empty() ? "" : (" " + operand)));
+            LC++;
+        }
+    }
+
+    // PASS-I OUTPUT
+    cout << "\n=========== PASS I OUTPUT ===========\n\n";
+
+    cout << "Intermediate Code:\n";
+    for (size_t i = 0; i < icType.size(); ++i) {
+        cout << setw(8) << icType[i] << "\t" << icOperand[i] << '\n';
+    }
+
+    cout << "\nSymbol Table:\n";
+    cout << left << setw(12) << "Symbol" << "Address\n";
+    for (const auto &s : symtab) {
+        cout << left << setw(12) << s.name << s.addr << '\n';
+    }
+
+    cout << "\nLiteral Table:\n";
+    cout << left << setw(12) << "Literal" << "Address\n";
+    for (const auto &L : littab) {
+        cout << left << setw(12) << L.lit;
+        if (L.addr == -1) cout << "UNASSIGNED\n"; else cout << L.addr << '\n';
+    }
+
+    cout << "\nPool Table:\n";
+    for (size_t i = 0; i < pooltab.size(); ++i) {
+        cout << pooltab[i] << '\n';
+    }
+
+    cout << "\n=====================================\n";
+    return 0;
+}
+
+
+
+/*input
+7
+** START 100
+** READ A
+** MOVER =5
+A MOVEM B
+** ADD C
+B DC 2
+** END **
+*/
